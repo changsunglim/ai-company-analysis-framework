@@ -1,0 +1,78 @@
+# AI Company Analysis Framework Configuration
+
+# Analysis pipeline stages
+pipeline:
+  stages:
+    - collect
+    - preprocess
+    - analyze
+    - report
+
+# Data collection settings
+collector:
+  financial:
+    enabled: true
+    metrics:
+      - revenue
+      - net_income
+      - operating_margin
+      - debt_to_equity
+      - free_cash_flow
+      - pe_ratio
+      - market_cap
+    period: "5y"           # Historical data period
+    interval: "1q"         # Quarterly data
+
+  news:
+    enabled: true
+    max_articles: 15       # Max articles to collect
+    lookback_days: 30      # How far back to search
+    sources:
+      - google_news
+
+  industry:
+    enabled: true
+    include_competitors: true
+    max_competitors: 5
+
+# Preprocessing settings
+preprocessor:
+  max_text_length: 8000     # Max chars per text chunk
+  remove_duplicates: true
+  min_relevance_score: 0.3
+
+# LLM Analysis settings
+analyzer:
+  model: "gpt-4o-mini"
+  temperature: 0.3
+  max_tokens: 4096
+
+  # Rate limiting (conservative for cost efficiency)
+  rate_limit:
+    max_requests_per_minute: 20
+    max_tokens_per_minute: 60000
+    retry_attempts: 3
+    retry_delay: 2.0         # seconds
+    exponential_backoff: true
+
+  # Analysis modules
+  modules:
+    - financial_analysis
+    - news_sentiment
+    - competitive_position
+    - risk_assessment
+    - growth_outlook
+
+# Report generation settings
+reporter:
+  format: "markdown"          # markdown | json
+  output_dir: "output"
+  include_sources: true
+  include_timestamp: true
+  template: "default"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "analysis.log"
+  console: true
