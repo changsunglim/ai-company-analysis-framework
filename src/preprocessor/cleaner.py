@@ -1,9 +1,6 @@
 """
-Data preprocessing and cleaning pipeline.
-
-Normalizes, deduplicates, and chunks collected data before
-sending to the LLM for analysis. Designed to minimize token
-usage while preserving analytical value.
+Data preprocessor - cleans, deduplicates, and chunks data for LLM input.
+Token counting with tiktoken to minimize API costs.
 """
 
 import re
@@ -19,8 +16,7 @@ logger = setup_logger("preprocessor")
 
 @dataclass
 class ProcessedChunk:
-    """A preprocessed text chunk ready for LLM analysis."""
-
+    """Text chunk ready for LLM."""
     chunk_id: str
     text: str
     token_count: int
@@ -31,14 +27,8 @@ class ProcessedChunk:
 
 class DataPreprocessor:
     """
-    Preprocesses collected data for LLM consumption.
-
-    Key responsibilities:
-    - Remove duplicate information across sources
-    - Clean and normalize text
-    - Chunk data to fit within token limits
-    - Prioritize high-reliability data
-    - Estimate token counts for cost optimization
+    Cleans and chunks collected data before sending to the LLM.
+    Steps: filter -> dedup -> clean -> chunk
     """
 
     def __init__(self, config: dict | None = None):
@@ -46,189 +36,143 @@ class DataPreprocessor:
         self.max_chunk_tokens = self.config.get("max_text_length", 3000)
         self.min_relevance = self.config.get("min_relevance_score", 0.3)
 
-        # Initialize tokenizer for accurate token counting
+        # tiktoken으로 정확한 토큰 수 계산
         try:
             self.tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
         except Exception:
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
-    def process(
-        self, collected_data: list[CollectedData]
-    ) -> list[ProcessedChunk]:
-        """
-        Process all collected data into LLM-ready chunks.
+    def process(self, collected_data: list[CollectedData]) -> list[ProcessedChunk]:
+        """Run the full preprocessing pipeline."""
+        logger.info(f"Processing {len(collected_data)} items...")
 
-        Args:
-            collected_data: Raw data from collectors
-
-        Returns:
-            List of ProcessedChunk objects optimized for LLM analysis
-        """
-        logger.info(
-            f"Preprocessing {len(collected_data)} data items..."
-        )
-
-        # Step 1: Filter by reliability
+        # 1. reliability 낮은거 필터
         filtered = self._filter_by_reliability(collected_data)
         logger.info(
-            f"After reliability filter: {len(filtered)} items "
-            f"(removed {len(collected_data) - len(filtered)})"
+            f"Reliability filter: {len(filtered)} kept "
+            f"({len(collected_data) - len(filtered)} removed)"
         )
 
-        # Step 2: Deduplicate
+        # 2. 중복 제거
         deduped = self._deduplicate(filtered)
         logger.info(
-            f"After deduplication: {len(deduped)} items "
-            f"(removed {len(filtered) - len(deduped)})"
+            f"Dedup: {len(deduped)} unique "
+            f"({len(filtered) - len(deduped)} dupes)"
         )
 
-        # Step 3: Clean text
+        # 3. 텍스트 정리
         cleaned = [self._clean_text(d) for d in deduped]
 
-        # Step 4: Chunk for token limits
+        # 4. 토큰 제한에 맞게 분할
         chunks = self._chunk_data(cleaned)
         logger.info(
-            f"Created {len(chunks)} chunks "
-            f"(total tokens: {sum(c.token_count for c in chunks):,})"
+            f"Chunked: {len(chunks)} chunks, "
+            f"{sum(c.token_count for c in chunks):,} total tokens"
         )
 
         return chunks
 
-    def _filter_by_reliability(
-        self, data: list[CollectedData]
-    ) -> list[CollectedData]:
-        """Remove data below minimum reliability threshold."""
-        return [
-            d for d in data if d.reliability_score >= self.min_relevance
-        ]
+    def _filter_by_reliability(self, data: list[CollectedData]) -> list[CollectedData]:
+        return [d for d in data if d.reliability_score >= self.min_relevance]
 
-    def _deduplicate(
-        self, data: list[CollectedData]
-    ) -> list[CollectedData]:
-        """Remove duplicate data based on content similarity."""
-        seen_texts: set[str] = set()
-        unique_data: list[CollectedData] = []
+    def _deduplicate(self, data: list[CollectedData]) -> list[CollectedData]:
+        seen: set[str] = set()
+        unique: list[CollectedData] = []
 
         for item in data:
-            # Create a normalized fingerprint for dedup
-            fingerprint = self._create_fingerprint(item.raw_text)
+            fp = self._fingerprint(item.raw_text)
+            if fp not in seen:
+                seen.add(fp)
+                unique.append(item)
 
-            if fingerprint not in seen_texts:
-                seen_texts.add(fingerprint)
-                unique_data.append(item)
+        return unique
 
-        return unique_data
-
-    def _create_fingerprint(self, text: str) -> str:
-        """Create a normalized fingerprint for deduplication."""
-        # Normalize whitespace, lowercase, remove punctuation
+    def _fingerprint(self, text: str) -> str:
+        """Normalize text for dedup comparison."""
         normalized = re.sub(r"\s+", " ", text.lower().strip())
         normalized = re.sub(r"[^\w\s]", "", normalized)
-        # Use first 200 chars as fingerprint (good enough for dedup)
-        return normalized[:200]
+        return normalized[:200]  # 처음 200자면 충분
 
     def _clean_text(self, data: CollectedData) -> CollectedData:
-        """Clean and normalize text content."""
         text = data.raw_text
 
-        # Remove excessive whitespace
+        # 공백 정리
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r" {2,}", " ", text)
 
-        # Remove common noise patterns
-        text = re.sub(r"https?://\S+", "[URL]", text)  # Replace URLs
-        text = re.sub(r"\S+@\S+", "[EMAIL]", text)  # Replace emails
+        # URL, 이메일 제거
+        text = re.sub(r"https?://\S+", "[URL]", text)
+        text = re.sub(r"\S+@\S+", "[EMAIL]", text)
 
-        # Trim very long texts
+        # 너무 긴 텍스트 자르기
         tokens = self._count_tokens(text)
         if tokens > self.max_chunk_tokens * 2:
-            text = self._truncate_to_tokens(
-                text, self.max_chunk_tokens * 2
-            )
+            text = self._truncate_to_tokens(text, self.max_chunk_tokens * 2)
 
         data.raw_text = text.strip()
         return data
 
-    def _chunk_data(
-        self, data: list[CollectedData]
-    ) -> list[ProcessedChunk]:
-        """Split data into token-limited chunks."""
+    def _chunk_data(self, data: list[CollectedData]) -> list[ProcessedChunk]:
         chunks: list[ProcessedChunk] = []
 
         for i, item in enumerate(data):
-            token_count = self._count_tokens(item.raw_text)
+            tc = self._count_tokens(item.raw_text)
 
-            if token_count <= self.max_chunk_tokens:
-                # Fits in a single chunk
-                chunks.append(
-                    ProcessedChunk(
-                        chunk_id=f"{item.data_type}_{i}_0",
-                        text=item.raw_text,
-                        token_count=token_count,
+            if tc <= self.max_chunk_tokens:
+                chunks.append(ProcessedChunk(
+                    chunk_id=f"{item.data_type}_{i}_0",
+                    text=item.raw_text,
+                    token_count=tc,
+                    data_type=item.data_type,
+                    source=item.source,
+                    metadata=item.metadata,
+                ))
+            else:
+                # 큰 텍스트는 문단 단위로 분할
+                parts = self._split_text(item.raw_text, self.max_chunk_tokens)
+                for j, part in enumerate(parts):
+                    chunks.append(ProcessedChunk(
+                        chunk_id=f"{item.data_type}_{i}_{j}",
+                        text=part,
+                        token_count=self._count_tokens(part),
                         data_type=item.data_type,
                         source=item.source,
-                        metadata=item.metadata,
-                    )
-                )
-            else:
-                # Split into multiple chunks
-                sub_chunks = self._split_text(
-                    item.raw_text, self.max_chunk_tokens
-                )
-                for j, sub_text in enumerate(sub_chunks):
-                    chunks.append(
-                        ProcessedChunk(
-                            chunk_id=f"{item.data_type}_{i}_{j}",
-                            text=sub_text,
-                            token_count=self._count_tokens(sub_text),
-                            data_type=item.data_type,
-                            source=item.source,
-                            metadata={
-                                **item.metadata,
-                                "chunk_index": j,
-                                "total_chunks": len(sub_chunks),
-                            },
-                        )
-                    )
+                        metadata={**item.metadata, "chunk_index": j, "total_chunks": len(parts)},
+                    ))
 
         return chunks
 
-    def _split_text(
-        self, text: str, max_tokens: int
-    ) -> list[str]:
-        """Split text into chunks at paragraph boundaries."""
+    def _split_text(self, text: str, max_tokens: int) -> list[str]:
+        """Split at paragraph boundaries."""
         paragraphs = text.split("\n\n")
         chunks: list[str] = []
-        current_chunk: list[str] = []
+        current: list[str] = []
         current_tokens = 0
 
         for para in paragraphs:
-            para_tokens = self._count_tokens(para)
+            pt = self._count_tokens(para)
 
-            if current_tokens + para_tokens > max_tokens and current_chunk:
-                chunks.append("\n\n".join(current_chunk))
-                current_chunk = [para]
-                current_tokens = para_tokens
+            if current_tokens + pt > max_tokens and current:
+                chunks.append("\n\n".join(current))
+                current = [para]
+                current_tokens = pt
             else:
-                current_chunk.append(para)
-                current_tokens += para_tokens
+                current.append(para)
+                current_tokens += pt
 
-        if current_chunk:
-            chunks.append("\n\n".join(current_chunk))
+        if current:
+            chunks.append("\n\n".join(current))
 
         return chunks
 
     def _count_tokens(self, text: str) -> int:
-        """Count tokens using tiktoken."""
         return len(self.tokenizer.encode(text))
 
     def _truncate_to_tokens(self, text: str, max_tokens: int) -> str:
-        """Truncate text to a maximum number of tokens."""
         tokens = self.tokenizer.encode(text)
         if len(tokens) <= max_tokens:
             return text
         return self.tokenizer.decode(tokens[:max_tokens])
 
     def get_total_tokens(self, chunks: list[ProcessedChunk]) -> int:
-        """Calculate total token count across all chunks."""
         return sum(c.token_count for c in chunks)

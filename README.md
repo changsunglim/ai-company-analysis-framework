@@ -1,6 +1,6 @@
-# AI Company Analysis Research Framework
+# AI Company Analysis Framework
 
-An automated pipeline that transforms hours of manual company research into structured, AI-powered analysis reports. Built with Python, OpenAI API, and async processing to deliver comprehensive financial, competitive, and strategic analysis.
+Automated pipeline that turns manual company research into structured, AI-powered reports. Uses OpenAI API + async processing for financial, competitive, and strategic analysis.
 
 ```
                     ┌─────────────────────────────────────────────────┐
@@ -21,51 +21,45 @@ An automated pipeline that transforms hours of manual company research into stru
    Google News          NLP               OpenAI API          output/*.md
 ```
 
-## Features
+## What it does
 
-- **Multi-source data collection** — Financial data (yfinance), news (Google News RSS), and competitor analysis run concurrently
-- **Smart preprocessing** — Deduplication, relevance filtering, and token-optimized chunking to minimize API costs
-- **5 analysis modules** — Financial health, news sentiment, competitive position, risk assessment, and growth outlook
-- **Rate-limited async engine** — Token bucket rate limiting, exponential backoff, and priority queuing for reliable API usage
-- **Automated report generation** — Jinja2-templated Markdown reports with executive summaries and full metadata
+- Collects financial data (yfinance), news (Google News RSS), and competitor info concurrently
+- Preprocesses with deduplication, relevance filtering, and token-optimized chunking
+- Runs 5 analysis modules: financial health, news sentiment, competitive position, risk assessment, growth outlook
+- Rate-limited async API calls with token bucket + exponential backoff
+- Generates Markdown reports with executive summaries
 
 ## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/isaaclim221b/ai-company-analysis-framework.git
+git clone https://github.com/changsunglim/ai-company-analysis-framework.git
 cd ai-company-analysis-framework
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Set up environment variables
+# Set your OpenAI API key
 cp .env.example .env
-# Edit .env and add your OpenAI API key
+# edit .env
 
-# Run analysis
 python -m src.main AAPL --company "Apple Inc"
 ```
 
 ## Usage
 
 ```bash
-# Basic analysis (uses ticker as company name)
+# Basic
 python -m src.main AAPL
 
-# Specify company name for better news search
+# With company name (helps news search)
 python -m src.main MSFT --company "Microsoft"
 
 # Korean stocks
 python -m src.main 005930.KS --company "Samsung Electronics"
 
-# Run specific modules only
+# Specific modules only
 python -m src.main TSLA --modules financial_analysis news_sentiment
 
-# Custom config
-python -m src.main GOOGL --config my_config.yaml
-
-# Custom output directory
+# Custom output dir
 python -m src.main NVDA --output-dir ./reports
 ```
 
@@ -76,78 +70,66 @@ ai-company-analysis-framework/
 ├── src/
 │   ├── main.py              # CLI entry point
 │   ├── pipeline.py          # Pipeline orchestrator
-│   ├── collector/           # Data collection modules
-│   │   ├── base.py          #   Abstract collector interface
-│   │   ├── financial.py     #   Yahoo Finance data
+│   ├── collector/           # Data collection
+│   │   ├── base.py          #   Collector interface
+│   │   ├── financial.py     #   Yahoo Finance
 │   │   ├── news.py          #   Google News RSS
-│   │   └── industry.py      #   Competitor analysis
-│   ├── preprocessor/        # Data preprocessing
-│   │   └── cleaner.py       #   Dedup, clean, chunk, tokenize
-│   ├── analyzer/            # LLM analysis engine
-│   │   ├── llm_engine.py    #   Async OpenAI with rate limiting
-│   │   └── prompts.py       #   Prompt engineering templates
-│   ├── reporter/            # Report generation
-│   │   └── generator.py     #   Markdown/JSON report builder
+│   │   └── industry.py      #   Competitor data
+│   ├── preprocessor/
+│   │   └── cleaner.py       #   Dedup, clean, chunk
+│   ├── analyzer/
+│   │   ├── llm_engine.py    #   Async OpenAI + rate limiting
+│   │   └── prompts.py       #   Prompt templates
+│   ├── reporter/
+│   │   └── generator.py     #   Markdown/JSON reports
 │   └── utils/
-│       ├── async_queue.py   #   Rate-limited async task queue
-│       └── logger.py        #   Rich console logging
-├── config/
-│   └── config.yaml          # Pipeline configuration
-├── examples/
-│   └── sample_report.md     # Example output report
+│       ├── async_queue.py   #   Rate-limited task queue
+│       └── logger.py        #   Logging
+├── config/config.yaml
+├── examples/sample_report.md
 ├── tests/
-│   ├── test_preprocessor.py
-│   └── test_async_queue.py
-├── .env.example
 ├── requirements.txt
 └── README.md
 ```
 
-## Architecture
+## How it works
 
-### Pipeline Design
+### Pipeline
 
-The framework follows a **staged pipeline architecture** where each stage is independently configurable and testable:
+4-stage pipeline, each stage independently configurable:
 
-1. **Collect** — Three collectors run concurrently via `asyncio.gather()`, gathering financial metrics, news articles, and competitor data. Each collector implements the `BaseCollector` interface for consistency.
+1. **Collect** — Three collectors run concurrently (`asyncio.gather`). Financial metrics from yfinance, news from Google News RSS, competitor data from yfinance. All implement `BaseCollector` interface.
 
-2. **Preprocess** — Raw data passes through reliability filtering (configurable threshold), content deduplication (normalized fingerprinting), text cleaning, and token-aware chunking using `tiktoken` for accurate GPT token counting.
+2. **Preprocess** — Filter by reliability score → deduplicate with normalized fingerprinting → clean text → chunk with `tiktoken` for accurate token counting. Goal is to minimize tokens sent to the API.
 
-3. **Analyze** — The LLM engine routes preprocessed chunks to appropriate analysis modules based on a relevance map. Modules run through an `AsyncTaskQueue` with token bucket rate limiting, exponential backoff retry, and concurrent execution control. After individual analyses complete, an executive summary synthesizes all findings.
+3. **Analyze** — LLM engine routes chunks to modules based on a relevance map (e.g. financial data goes to financial analysis, not sentiment). Runs through `AsyncTaskQueue` with rate limiting and retries. Executive summary is generated last from all other results.
 
-4. **Report** — Jinja2 templates assemble analysis results into formatted Markdown reports with metadata, timestamps, and source attribution.
+4. **Report** — Jinja2 templates assemble everything into Markdown with metadata and source attribution.
 
-### Rate Limiting Strategy
+### Rate Limiting
 
-API efficiency was a core design constraint. The `AsyncTaskQueue` implements:
-- **Token bucket** rate limiting (configurable requests/minute)
-- **Semaphore-based** concurrency control
-- **Exponential backoff** with configurable retry attempts
-- **Priority queuing** for critical analysis modules
-- **Usage tracking** for cost monitoring
+The `AsyncTaskQueue` was the trickiest part to get right. It does:
+- Token bucket rate limiting (requests/minute)
+- Semaphore for concurrency control
+- Exponential backoff on failures
+- Priority ordering
+- Usage/cost tracking
 
-### Prompt Engineering
+### Cost
 
-Each analysis module uses carefully engineered prompts (`src/analyzer/prompts.py`) designed through iterative experimentation to:
-- Extract maximum analytical depth per API call
-- Produce structured, parseable output
-- Include specific data citations
-- Distinguish facts from interpretation
+With `gpt-4o-mini`, a full analysis runs about **$0.005–$0.02** per company. The preprocessing pipeline keeps costs down by deduplicating, filtering, and only sending relevant data to each module.
 
 ## Configuration
 
-All pipeline parameters are configurable via `config/config.yaml`:
+Edit `config/config.yaml`:
 
 ```yaml
-# Rate limiting (adjust based on your API tier)
 analyzer:
   rate_limit:
     max_requests_per_minute: 20
-    max_tokens_per_minute: 60000
     retry_attempts: 3
     exponential_backoff: true
 
-# Control which collectors and modules run
 collector:
   financial:
     enabled: true
@@ -156,41 +138,22 @@ collector:
     max_articles: 15
 ```
 
-## Sample Output
-
-See [examples/sample_report.md](examples/sample_report.md) for a complete analysis report generated for Apple Inc. (AAPL).
-
-## Running Tests
+## Tests
 
 ```bash
 python -m pytest tests/ -v
 ```
 
-## Cost Efficiency
-
-Using `gpt-4o-mini`, a typical full analysis costs approximately **$0.005–$0.02** per company. The preprocessing pipeline minimizes token usage through:
-- Deduplication of overlapping data sources
-- Relevance-based filtering
-- Token-aware chunking (only sends what's needed)
-- Module-specific context routing (financial data → financial analysis, not sentiment analysis)
-
 ## Tech Stack
 
-- **Python 3.11+** — Async/await, type hints, dataclasses
-- **OpenAI API** — GPT-4o-mini for cost-efficient analysis
-- **yfinance** — Financial data and market metrics
-- **aiohttp** — Async HTTP for news collection
-- **tiktoken** — Accurate GPT token counting
-- **Rich** — Terminal UI and logging
-- **Jinja2** — Report template rendering
-- **tenacity** — Retry logic with exponential backoff
-
-## License
-
-MIT License
+- Python 3.11+ (async/await, type hints)
+- OpenAI API (gpt-4o-mini)
+- yfinance, aiohttp, tiktoken, Rich, Jinja2, tenacity
 
 ## Author
 
-**Isaac Lim (임창성)**
-- Computer Science @ University of Liverpool
-- [GitHub](https://github.com/isaaclim221b)
+**Isaac Lim (임창성)** — CS @ University of Liverpool
+
+## License
+
+MIT

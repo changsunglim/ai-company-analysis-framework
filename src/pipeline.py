@@ -1,8 +1,6 @@
 """
-Main analysis pipeline orchestrator.
-
-Coordinates the full data collection → preprocessing → analysis → report
-pipeline with configurable stages and comprehensive error handling.
+Main pipeline orchestrator.
+Coordinates: collect -> preprocess -> analyze -> report
 """
 
 import asyncio
@@ -23,57 +21,39 @@ logger = setup_logger("pipeline")
 
 class AnalysisPipeline:
     """
-    End-to-end company analysis pipeline.
+    4-stage company analysis pipeline.
 
-    Stages:
-    1. COLLECT  — Gather financial data, news, and industry context
-    2. PREPROCESS — Clean, deduplicate, and chunk data
-    3. ANALYZE — Run LLM-powered analysis modules
-    4. REPORT — Generate formatted output report
-
-    Each stage is independently configurable and the pipeline
-    tracks performance metrics throughout execution.
+    1. COLLECT  - financial data, news, industry context
+    2. PREPROCESS - clean, dedup, chunk
+    3. ANALYZE - LLM modules
+    4. REPORT - markdown output
     """
 
     def __init__(self, config_path: str = "config/config.yaml"):
         self.config = self._load_config(config_path)
 
-        # Initialize pipeline components
-        collector_config = self.config.get("collector", {})
+        collector_cfg = self.config.get("collector", {})
         self.collectors = {
-            "financial": FinancialCollector(
-                collector_config.get("financial", {})
-            ),
-            "news": NewsCollector(collector_config.get("news", {})),
-            "industry": IndustryCollector(
-                collector_config.get("industry", {})
-            ),
+            "financial": FinancialCollector(collector_cfg.get("financial", {})),
+            "news": NewsCollector(collector_cfg.get("news", {})),
+            "industry": IndustryCollector(collector_cfg.get("industry", {})),
         }
 
-        self.preprocessor = DataPreprocessor(
-            self.config.get("preprocessor", {})
-        )
+        self.preprocessor = DataPreprocessor(self.config.get("preprocessor", {}))
         self.analyzer = LLMAnalyzer(self.config.get("analyzer", {}))
-        self.reporter = ReportGenerator(
-            self.config.get("reporter", {})
-        )
+        self.reporter = ReportGenerator(self.config.get("reporter", {}))
 
-        # Pipeline metrics
         self.metrics: dict[str, float] = {}
 
     def _load_config(self, config_path: str) -> dict:
-        """Load pipeline configuration from YAML file."""
         path = Path(config_path)
         if path.exists():
             with open(path, "r") as f:
                 config = yaml.safe_load(f)
-            logger.info(f"Loaded config from {config_path}")
+            logger.info(f"Config loaded: {config_path}")
             return config
         else:
-            logger.warning(
-                f"Config file not found: {config_path}. "
-                "Using defaults."
-            )
+            logger.warning(f"Config not found: {config_path}, using defaults")
             return {}
 
     async def run(
@@ -83,192 +63,151 @@ class AnalysisPipeline:
         modules: list[str] | None = None,
     ) -> str:
         """
-        Execute the full analysis pipeline.
+        Run the full pipeline.
 
         Args:
-            company: Company name (used for news search)
-            ticker: Stock ticker symbol (used for financial data).
-                    If not provided, company name is used as ticker.
-            modules: Specific analysis modules to run
+            company: Company name (for news search)
+            ticker: Stock ticker (for financial data). Falls back to company name.
+            modules: Specific modules to run (None = all)
 
         Returns:
-            Path to the generated report
+            Path to generated report
         """
         ticker = ticker or company
         pipeline_start = time.time()
 
-        logger.info(f"{'=' * 60}")
-        logger.info(f"Starting analysis pipeline for: {company} ({ticker})")
-        logger.info(f"{'=' * 60}")
+        logger.info(f"{'=' * 50}")
+        logger.info(f"Pipeline start: {company} ({ticker})")
+        logger.info(f"{'=' * 50}")
 
-        # Stage 1: Collect
-        collected_data = await self._stage_collect(company, ticker)
-        if not collected_data:
+        # stage 1
+        collected = await self._stage_collect(company, ticker)
+        if not collected:
             raise RuntimeError(
-                f"No data collected for {company}. "
-                "Check the ticker symbol and network connection."
+                f"No data for {company}. Check ticker/network."
             )
 
-        # Stage 2: Preprocess
-        chunks = self._stage_preprocess(collected_data)
+        # stage 2
+        chunks = self._stage_preprocess(collected)
         if not chunks:
-            raise RuntimeError("Preprocessing produced no usable chunks.")
+            raise RuntimeError("Preprocessing produced nothing usable.")
 
-        # Stage 3: Analyze
-        analysis_results = await self._stage_analyze(
-            company, chunks, modules
-        )
-        if not analysis_results:
+        # stage 3
+        results = await self._stage_analyze(company, chunks, modules)
+        if not results:
             raise RuntimeError("Analysis produced no results.")
 
-        # Stage 4: Report
-        report_path = self._stage_report(company, analysis_results)
+        # stage 4
+        report_path = self._stage_report(company, results)
 
-        # Final metrics
         total_time = time.time() - pipeline_start
         self.metrics["total_pipeline_time"] = round(total_time, 2)
 
-        logger.info(f"{'=' * 60}")
-        logger.info(f"Pipeline complete in {total_time:.1f}s")
-        logger.info(f"Report: {report_path}")
-        logger.info(f"{'=' * 60}")
+        logger.info(f"{'=' * 50}")
+        logger.info(f"Done in {total_time:.1f}s -> {report_path}")
+        logger.info(f"{'=' * 50}")
 
         self._print_summary()
-
         return report_path
 
     async def _stage_collect(
         self, company: str, ticker: str
     ) -> list[CollectedData]:
-        """Stage 1: Collect data from all sources concurrently."""
-        stage_start = time.time()
+        """Stage 1: data collection from all sources."""
+        start = time.time()
         logger.info("[1/4] Collecting data...")
 
         all_data: list[CollectedData] = []
-        collector_config = self.config.get("collector", {})
+        cfg = self.config.get("collector", {})
 
-        # Run collectors concurrently
+        # 동시에 수집
         tasks = []
-
-        if collector_config.get("financial", {}).get("enabled", True):
+        if cfg.get("financial", {}).get("enabled", True):
             tasks.append(self.collectors["financial"].collect(ticker))
-
-        if collector_config.get("news", {}).get("enabled", True):
+        if cfg.get("news", {}).get("enabled", True):
             tasks.append(self.collectors["news"].collect(company))
-
-        if collector_config.get("industry", {}).get("enabled", True):
+        if cfg.get("industry", {}).get("enabled", True):
             tasks.append(self.collectors["industry"].collect(ticker))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for result in results:
-            if isinstance(result, Exception):
-                logger.warning(f"Collector error: {result}")
-            elif isinstance(result, list):
-                all_data.extend(result)
+        for r in results:
+            if isinstance(r, Exception):
+                logger.warning(f"Collector error: {r}")
+            elif isinstance(r, list):
+                all_data.extend(r)
 
-        elapsed = time.time() - stage_start
+        elapsed = time.time() - start
         self.metrics["collect_time"] = round(elapsed, 2)
         self.metrics["data_points"] = len(all_data)
 
         logger.info(
-            f"[1/4] Collection complete: {len(all_data)} data points "
-            f"in {elapsed:.1f}s"
+            f"[1/4] Done: {len(all_data)} items in {elapsed:.1f}s"
         )
         return all_data
 
-    def _stage_preprocess(
-        self, collected_data: list[CollectedData]
-    ) -> list:
-        """Stage 2: Preprocess and chunk data."""
-        stage_start = time.time()
-        logger.info("[2/4] Preprocessing data...")
+    def _stage_preprocess(self, data: list[CollectedData]) -> list:
+        """Stage 2: clean + chunk."""
+        start = time.time()
+        logger.info("[2/4] Preprocessing...")
 
-        chunks = self.preprocessor.process(collected_data)
+        chunks = self.preprocessor.process(data)
 
-        elapsed = time.time() - stage_start
+        elapsed = time.time() - start
         self.metrics["preprocess_time"] = round(elapsed, 2)
         self.metrics["chunks"] = len(chunks)
-        self.metrics["total_tokens_input"] = sum(
-            c.token_count for c in chunks
-        )
+        self.metrics["total_tokens_input"] = sum(c.token_count for c in chunks)
 
         logger.info(
-            f"[2/4] Preprocessing complete: {len(chunks)} chunks, "
-            f"{self.metrics['total_tokens_input']:,} tokens "
-            f"in {elapsed:.1f}s"
+            f"[2/4] Done: {len(chunks)} chunks, "
+            f"{self.metrics['total_tokens_input']:,} tokens ({elapsed:.1f}s)"
         )
         return chunks
 
     async def _stage_analyze(
         self, company: str, chunks: list, modules: list[str] | None
     ) -> dict[str, str]:
-        """Stage 3: Run LLM analysis."""
-        stage_start = time.time()
-        logger.info("[3/4] Running LLM analysis...")
+        """Stage 3: LLM analysis."""
+        start = time.time()
+        logger.info("[3/4] Analyzing...")
 
-        analysis_modules = modules or self.config.get(
-            "analyzer", {}
-        ).get("modules")
+        analysis_modules = modules or self.config.get("analyzer", {}).get("modules")
 
         results = await self.analyzer.analyze(
-            company=company,
-            chunks=chunks,
-            modules=analysis_modules,
+            company=company, chunks=chunks, modules=analysis_modules,
         )
 
-        elapsed = time.time() - stage_start
+        elapsed = time.time() - start
         self.metrics["analyze_time"] = round(elapsed, 2)
         self.metrics["modules_completed"] = len(results)
         self.metrics.update(self.analyzer.get_usage_stats())
 
-        logger.info(
-            f"[3/4] Analysis complete: {len(results)} modules "
-            f"in {elapsed:.1f}s"
-        )
+        logger.info(f"[3/4] Done: {len(results)} modules ({elapsed:.1f}s)")
         return results
 
-    def _stage_report(
-        self, company: str, analysis_results: dict[str, str]
-    ) -> str:
-        """Stage 4: Generate report."""
-        stage_start = time.time()
+    def _stage_report(self, company: str, results: dict[str, str]) -> str:
+        """Stage 4: generate report."""
+        start = time.time()
         logger.info("[4/4] Generating report...")
 
-        report_path = self.reporter.generate(
+        path = self.reporter.generate(
             company=company,
-            analysis_results=analysis_results,
+            analysis_results=results,
             usage_stats=self.analyzer.get_usage_stats(),
             sources=["Yahoo Finance", "Google News"],
         )
 
-        elapsed = time.time() - stage_start
+        elapsed = time.time() - start
         self.metrics["report_time"] = round(elapsed, 2)
-
-        logger.info(f"[4/4] Report generated in {elapsed:.1f}s")
-        return report_path
+        logger.info(f"[4/4] Report done ({elapsed:.1f}s)")
+        return path
 
     def _print_summary(self) -> None:
-        """Print pipeline execution summary."""
-        logger.info("\n--- Pipeline Summary ---")
-        logger.info(
-            f"  Total time: {self.metrics.get('total_pipeline_time', 0)}s"
-        )
-        logger.info(
-            f"  Data points collected: {self.metrics.get('data_points', 0)}"
-        )
-        logger.info(
-            f"  Chunks processed: {self.metrics.get('chunks', 0)}"
-        )
-        logger.info(
-            f"  Analysis modules: {self.metrics.get('modules_completed', 0)}"
-        )
-        logger.info(
-            f"  API calls: {self.metrics.get('api_calls', 0)}"
-        )
-        logger.info(
-            f"  Total tokens: {self.metrics.get('total_tokens', 'N/A')}"
-        )
-        logger.info(
-            f"  Estimated cost: ${self.metrics.get('estimated_cost_usd', 0):.4f}"
-        )
+        logger.info("\n--- Summary ---")
+        logger.info(f"  Time: {self.metrics.get('total_pipeline_time', 0)}s")
+        logger.info(f"  Data: {self.metrics.get('data_points', 0)} items")
+        logger.info(f"  Chunks: {self.metrics.get('chunks', 0)}")
+        logger.info(f"  Modules: {self.metrics.get('modules_completed', 0)}")
+        logger.info(f"  API calls: {self.metrics.get('api_calls', 0)}")
+        logger.info(f"  Tokens: {self.metrics.get('total_tokens', 'N/A')}")
+        logger.info(f"  Cost: ${self.metrics.get('estimated_cost_usd', 0):.4f}")

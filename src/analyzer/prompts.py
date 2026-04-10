@@ -1,9 +1,6 @@
 """
-Prompt engineering templates for company analysis.
-
-Each prompt is designed through iterative experimentation to extract
-maximum analytical value while minimizing token usage. Prompts use
-structured output formats to enable reliable downstream parsing.
+Prompt templates for each analysis module.
+Spent a while tuning these to get good structured output.
 """
 
 SYSTEM_PROMPT = """You are a senior equity research analyst with expertise in
@@ -36,7 +33,6 @@ For each area, assign a rating: STRONG / ADEQUATE / WEAK / INSUFFICIENT DATA
 
 End with a 2-3 sentence overall financial health summary.""",
     },
-
     "news_sentiment": {
         "name": "News Sentiment Analysis",
         "prompt": """Analyze the following recent news articles about {company}.
@@ -53,7 +49,6 @@ Provide:
 
 Support each point with specific article references.""",
     },
-
     "competitive_position": {
         "name": "Competitive Position Analysis",
         "prompt": """Analyze the competitive landscape for {company} based on the following data.
@@ -70,7 +65,6 @@ Provide:
 
 Use specific metrics to support your comparisons.""",
     },
-
     "risk_assessment": {
         "name": "Risk Assessment",
         "prompt": """Based on all available data for {company}, provide a comprehensive risk assessment.
@@ -92,7 +86,6 @@ For each risk:
 
 End with the top 3 risks an investor should monitor most closely.""",
     },
-
     "growth_outlook": {
         "name": "Growth Outlook",
         "prompt": """Based on all available data for {company}, assess the growth outlook.
@@ -113,13 +106,12 @@ Provide:
 
 End with a confidence level (HIGH/MEDIUM/LOW) for your assessment.""",
     },
-
     "executive_summary": {
         "name": "Executive Summary",
         "prompt": """You are writing the executive summary for a comprehensive
 company analysis report on {company}.
 
-Here are the individual analysis sections that have been completed:
+Here are the individual analysis sections:
 
 {context}
 
@@ -131,44 +123,25 @@ Write a cohesive executive summary (300-500 words) that:
 4. Provides an overall assessment: BULLISH / NEUTRAL / BEARISH
 5. Ends with 2-3 key metrics to watch going forward
 
-This should read as a standalone overview that a busy executive could
-use to quickly understand the company's position and outlook.""",
+This should work as a standalone overview for a busy reader.""",
     },
 }
 
 
 class PromptManager:
-    """
-    Manages prompt templates and context injection.
-
-    Handles the assembly of prompts with variable context data,
-    ensuring optimal token usage and consistent output structure.
-    """
+    """Manages prompt templates."""
 
     def __init__(self):
         self.system_prompt = SYSTEM_PROMPT
         self.templates = ANALYSIS_PROMPTS
 
     def get_analysis_prompt(
-        self,
-        module: str,
-        company: str,
-        context: str,
+        self, module: str, company: str, context: str,
     ) -> dict[str, str]:
-        """
-        Build a complete prompt for a given analysis module.
-
-        Args:
-            module: Analysis module name (e.g., "financial_analysis")
-            company: Company name/ticker
-            context: Preprocessed data context
-
-        Returns:
-            Dict with "system" and "user" prompt strings
-        """
+        """Build prompt for an analysis module."""
         if module not in self.templates:
             raise ValueError(
-                f"Unknown analysis module: {module}. "
+                f"Unknown module: {module}. "
                 f"Available: {list(self.templates.keys())}"
             )
 
@@ -184,17 +157,9 @@ class PromptManager:
         }
 
     def get_available_modules(self) -> list[str]:
-        """Return list of available analysis modules."""
         return list(self.templates.keys())
 
-    def estimate_prompt_tokens(
-        self, module: str, context_tokens: int
-    ) -> int:
-        """
-        Estimate total tokens for a prompt (template + context).
-        Useful for cost estimation before running analysis.
-        """
-        # Rough estimate: template overhead ~200 tokens + context
-        template_overhead = 200
-        system_overhead = 150
-        return template_overhead + system_overhead + context_tokens
+    def estimate_prompt_tokens(self, module: str, context_tokens: int) -> int:
+        """Rough token estimate for cost prediction."""
+        # template ~200 tokens, system ~150 tokens
+        return 200 + 150 + context_tokens

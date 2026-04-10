@@ -1,9 +1,7 @@
 """
-AI Company Analysis Research Framework
+AI Company Analysis Framework
 
-An automated pipeline for comprehensive company analysis using LLMs.
-Built to transform hours of manual research into structured, AI-powered reports.
-
+Automated company analysis pipeline using LLMs.
 Author: Isaac Lim (임창성)
 """
 

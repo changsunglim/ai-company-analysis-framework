@@ -1,9 +1,5 @@
 """
-LLM analysis engine with rate limiting and error handling.
-
-Core component that interfaces with OpenAI API to perform
-multi-dimensional company analysis. Implements robust rate
-limiting, retry logic, and token management.
+LLM engine - handles all the OpenAI API calls with rate limiting.
 """
 
 import asyncio
@@ -27,30 +23,28 @@ logger = setup_logger("llm_engine")
 
 
 class LLMAnalyzer:
-    """
-    LLM-powered analysis engine with built-in rate limiting.
+    """Main LLM interface. Runs analysis modules through OpenAI API."""
 
-    Orchestrates multiple analysis modules (financial, sentiment,
-    competitive, risk, growth) through the OpenAI API with:
-    - Token bucket rate limiting
-    - Exponential backoff retry
-    - Async batch processing
-    - Cost tracking
-    """
+    # 모듈별로 어떤 데이터 타입이 관련있는지 매핑
+    MODULE_DATA_MAPPING = {
+        "financial_analysis": ["financial"],
+        "news_sentiment": ["news"],
+        "competitive_position": ["industry", "financial"],
+        "risk_assessment": ["financial", "news", "industry"],
+        "growth_outlook": ["financial", "news", "industry"],
+    }
 
     def __init__(self, config: dict | None = None):
         self.config = config or {}
 
-        # API configuration
         self.model = self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.3)
         self.max_tokens = self.config.get("max_tokens", 4096)
 
-        # Rate limiting configuration
+        # rate limit 설정
         rate_config = self.config.get("rate_limit", {})
         self.max_rpm = rate_config.get("max_requests_per_minute", 20)
 
-        # Initialize components
         self.client = AsyncOpenAI()
         self.prompt_manager = PromptManager()
         self.task_queue = AsyncTaskQueue(
@@ -58,12 +52,10 @@ class LLMAnalyzer:
             max_per_minute=self.max_rpm,
             retry_attempts=rate_config.get("retry_attempts", 3),
             retry_delay=rate_config.get("retry_delay", 2.0),
-            exponential_backoff=rate_config.get(
-                "exponential_backoff", True
-            ),
+            exponential_backoff=rate_config.get("exponential_backoff", True),
         )
 
-        # Usage tracking
+        # usage tracking
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_cost = 0.0
@@ -75,20 +67,9 @@ class LLMAnalyzer:
         chunks: list[ProcessedChunk],
         modules: list[str] | None = None,
     ) -> dict[str, str]:
-        """
-        Run all analysis modules on preprocessed data.
-
-        Args:
-            company: Company name/ticker
-            chunks: Preprocessed data chunks
-            modules: Specific modules to run (default: all)
-
-        Returns:
-            Dict mapping module names to analysis results
-        """
+        """Run all analysis modules on preprocessed data."""
         if modules is None:
             modules = self.prompt_manager.get_available_modules()
-            # Remove executive_summary — it runs after others
             modules = [m for m in modules if m != "executive_summary"]
 
         logger.info(
@@ -96,17 +77,14 @@ class LLMAnalyzer:
             f"({len(modules)} modules, {len(chunks)} data chunks)"
         )
 
-        # Group chunks by data type for targeted analysis
         chunks_by_type = self._group_chunks(chunks)
 
-        # Build tasks for each analysis module
+        # 각 모듈별로 task 생성
         tasks = []
         for module in modules:
             context = self._build_context(module, chunks_by_type)
             if not context.strip():
-                logger.warning(
-                    f"No relevant data for module '{module}', skipping"
-                )
+                logger.warning(f"No data for module '{module}', skipping")
                 continue
 
             prompt = self.prompt_manager.get_analysis_prompt(
@@ -127,16 +105,15 @@ class LLMAnalyzer:
                 )
             )
 
-        # Execute all analysis tasks with rate limiting
+        # rate limiting 적용해서 실행
         results = await self.task_queue.process_batch(tasks)
 
-        # Map results back to module names
         analysis_results = {}
         for task, result in zip(tasks, results):
             if result and not isinstance(result, Exception):
                 analysis_results[task.task_id] = result
 
-        # Generate executive summary from all analysis results
+        # executive summary는 다른 분석 끝나고 생성
         if analysis_results:
             summary = await self._generate_executive_summary(
                 company, analysis_results
@@ -145,35 +122,25 @@ class LLMAnalyzer:
                 analysis_results["executive_summary"] = summary
 
         logger.info(
-            f"Analysis complete. "
-            f"API calls: {self.api_calls}, "
-            f"Total tokens: {self.total_prompt_tokens + self.total_completion_tokens:,}, "
-            f"Estimated cost: ${self.total_cost:.4f}"
+            f"Analysis done. API calls: {self.api_calls}, "
+            f"tokens: {self.total_prompt_tokens + self.total_completion_tokens:,}, "
+            f"cost: ${self.total_cost:.4f}"
         )
 
         return analysis_results
 
     async def _call_llm(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        module_name: str,
+        self, system_prompt: str, user_prompt: str, module_name: str
     ) -> str:
-        """
-        Make a single LLM API call with error handling.
-
-        Implements retry logic for transient errors while
-        failing fast on permanent errors (e.g., invalid API key).
-        """
-        logger.info(f"Running analysis module: {module_name}")
-        start_time = time.time()
+        """Single LLM API call with error handling."""
+        logger.info(f"Running module: {module_name}")
+        start = time.time()
 
         try:
             response = await self._api_call_with_retry(
                 system_prompt, user_prompt
             )
 
-            # Track usage
             usage = response.usage
             if usage:
                 self.total_prompt_tokens += usage.prompt_tokens
@@ -181,14 +148,13 @@ class LLMAnalyzer:
                 self._update_cost(usage.prompt_tokens, usage.completion_tokens)
 
             self.api_calls += 1
-            elapsed = time.time() - start_time
+            elapsed = time.time() - start
 
             result = response.choices[0].message.content
             logger.info(
-                f"Module '{module_name}' complete "
-                f"({elapsed:.1f}s, {usage.total_tokens if usage else '?'} tokens)"
+                f"'{module_name}' done ({elapsed:.1f}s, "
+                f"{usage.total_tokens if usage else '?'} tokens)"
             )
-
             return result
 
         except Exception as e:
@@ -203,10 +169,8 @@ class LLMAnalyzer:
             f"Retrying API call (attempt {retry_state.attempt_number})..."
         ),
     )
-    async def _api_call_with_retry(
-        self, system_prompt: str, user_prompt: str
-    ) -> Any:
-        """Make an API call with tenacity retry for rate limits."""
+    async def _api_call_with_retry(self, system_prompt: str, user_prompt: str) -> Any:
+        """API call with tenacity retry for rate limits."""
         return await self.client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
@@ -220,8 +184,7 @@ class LLMAnalyzer:
     async def _generate_executive_summary(
         self, company: str, analysis_results: dict[str, str]
     ) -> str | None:
-        """Generate an executive summary from all analysis results."""
-        # Combine all analysis outputs
+        """Generate executive summary from all analysis results."""
         combined = "\n\n---\n\n".join(
             f"## {module.replace('_', ' ').title()}\n\n{result}"
             for module, result in analysis_results.items()
@@ -240,13 +203,13 @@ class LLMAnalyzer:
                 module_name="Executive Summary",
             )
         except Exception as e:
-            logger.error(f"Failed to generate executive summary: {e}")
+            logger.error(f"Executive summary failed: {e}")
             return None
 
     def _group_chunks(
         self, chunks: list[ProcessedChunk]
     ) -> dict[str, list[ProcessedChunk]]:
-        """Group chunks by data type for targeted module context."""
+        """Group chunks by their data_type field."""
         grouped: dict[str, list[ProcessedChunk]] = {}
         for chunk in chunks:
             grouped.setdefault(chunk.data_type, []).append(chunk)
@@ -257,63 +220,40 @@ class LLMAnalyzer:
         module: str,
         chunks_by_type: dict[str, list[ProcessedChunk]],
     ) -> str:
-        """
-        Build context string for a specific analysis module.
-
-        Maps modules to the most relevant data types to minimize
-        token usage while maximizing analytical relevance.
-        """
-        # Module-to-data-type relevance mapping
-        relevance_map = {
-            "financial_analysis": ["financial"],
-            "news_sentiment": ["news"],
-            "competitive_position": ["industry", "financial"],
-            "risk_assessment": ["financial", "news", "industry"],
-            "growth_outlook": ["financial", "news", "industry"],
-        }
-
-        relevant_types = relevance_map.get(
+        """Build context string for a module. Only includes relevant data types."""
+        relevant_types = self.MODULE_DATA_MAPPING.get(
             module, list(chunks_by_type.keys())
         )
 
-        context_parts = []
-        for data_type in relevant_types:
-            chunks = chunks_by_type.get(data_type, [])
-            for chunk in chunks:
-                context_parts.append(chunk.text)
+        parts = []
+        for dtype in relevant_types:
+            for chunk in chunks_by_type.get(dtype, []):
+                parts.append(chunk.text)
 
-        return "\n\n".join(context_parts)
+        return "\n\n".join(parts)
 
-    def _update_cost(
-        self, prompt_tokens: int, completion_tokens: int
-    ) -> None:
-        """Estimate API cost based on model pricing."""
-        # gpt-4o-mini pricing (as of 2024)
+    def _update_cost(self, prompt_tokens: int, completion_tokens: int) -> None:
+        """Estimate cost. Pricing as of early 2024."""
+        # TODO: 모델 추가되면 여기 업데이트해야됨
         pricing = {
             "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
             "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
             "gpt-4-turbo": {"input": 10.00 / 1_000_000, "output": 30.00 / 1_000_000},
         }
 
-        model_price = pricing.get(
-            self.model, pricing["gpt-4o-mini"]
-        )
-        cost = (
+        model_price = pricing.get(self.model, pricing["gpt-4o-mini"])
+        self.total_cost += (
             prompt_tokens * model_price["input"]
             + completion_tokens * model_price["output"]
         )
-        self.total_cost += cost
 
     def get_usage_stats(self) -> dict:
-        """Return API usage statistics."""
         return {
             "model": self.model,
             "api_calls": self.api_calls,
             "prompt_tokens": self.total_prompt_tokens,
             "completion_tokens": self.total_completion_tokens,
-            "total_tokens": (
-                self.total_prompt_tokens + self.total_completion_tokens
-            ),
+            "total_tokens": self.total_prompt_tokens + self.total_completion_tokens,
             "estimated_cost_usd": round(self.total_cost, 4),
             "queue_metrics": self.task_queue.get_metrics(),
         }
