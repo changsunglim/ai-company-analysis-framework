@@ -152,7 +152,7 @@ python -m pytest tests/ -v
 
 ## Author
 
-**Isaac Lim (임창성)** — CS @ University of Liverpool
+**Isaac Lim** — CS at University of Liverpool
 
 ## License
 
