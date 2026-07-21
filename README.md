@@ -4,9 +4,9 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Automated pipeline that turns manual company research into structured, AI-powered reports. Uses OpenAI API + async processing for financial, competitive, and strategic analysis.
+Automated pipeline that turns manual company research into structured, AI-powered reports. Works with any OpenAI-compatible LLM + async processing for financial, competitive, and strategic analysis.
 
-**Results:** cuts company-analysis time from ~120 minutes of manual work to ~35 minutes automated, at $0.005–0.02 per run (gpt-4o-mini). Used to analyze 70+ companies. See a full example in [`examples/sample_report.md`](examples/sample_report.md).
+**Results:** cuts company-analysis time from ~120 minutes of manual work to ~35 minutes automated. Runs **free** on Gemini or Groq free-tier models (~$0 per run), or ~$0.005–0.02 per run on OpenAI `gpt-4o-mini`. Used to analyze 70+ companies. Full examples: **[BlackRock](examples/blackrock.md)** (generated free on Gemini, $0.00) · [Apple](examples/sample_report.md).
 
 ```
                     ┌─────────────────────────────────────────────────┐
@@ -24,7 +24,8 @@ Automated pipeline that turns manual company research into structured, AI-powere
         ▲                   ▲             │ • Summary    │          │
         │                   │             └──────────────┘          │
    Yahoo Finance       tiktoken              ▲                     ▼
-   Google News          NLP               OpenAI API          output/*.md
+   Google News          NLP          OpenAI-compatible LLM     output/*.md
+                                     (OpenAI · Gemini · Groq)
 ```
 
 ## What it does
@@ -43,12 +44,24 @@ cd ai-company-analysis-framework
 
 pip install -r requirements.txt
 
-# Set your OpenAI API key
+# Configure a provider (see .env.example for free Gemini/Groq options)
 cp .env.example .env
 # edit .env
 
 python -m src.main AAPL --company "Apple Inc"
 ```
+
+## Providers
+
+Works with any OpenAI-compatible endpoint — set these in `.env`:
+
+| Provider | Cost | Config |
+|---|---|---|
+| OpenAI | ~$0.005–0.02/run | `OPENAI_API_KEY=sk-...` |
+| **Gemini** (free tier) | **$0** | `LLM_API_KEY` + `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/` + `LLM_MODEL=gemini-2.0-flash` |
+| **Groq** (free tier) | **$0** | `LLM_API_KEY` + `LLM_BASE_URL=https://api.groq.com/openai/v1` + `LLM_MODEL=llama-3.3-70b-versatile` |
+
+Free tiers are rate-limited — dial concurrency down with `LLM_MAX_CONCURRENT=1` and `LLM_MAX_RPM=10` if you hit 429s. The report's cost line shows `$0.00` on free providers. The [BlackRock example](examples/blackrock.md) was generated this way.
 
 ## Usage
 

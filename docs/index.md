@@ -3,10 +3,12 @@
 [![CI](https://github.com/changsunglim/ai-company-analysis-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/changsunglim/ai-company-analysis-framework/actions/workflows/ci.yml)
 
 An async LLM pipeline that turns ~120 minutes of manual company research into a
-structured, sourced report in ~35 minutes, at **$0.005–0.02 per run**. Used to analyze
-**70+ companies**.
+structured, sourced report in ~35 minutes. Runs **free** on Gemini/Groq free-tier
+models, or ~$0.005–0.02/run on OpenAI. Used to analyze **70+ companies**.
 
-**→ [See a full report the tool generated (Apple / AAPL)](sample_report.html)**
+**Full reports the tool generated:**
+- **→ [BlackRock (BLK)](blackrock.html)** — generated free on Gemini, **$0.00**
+- **→ [Apple (AAPL)](sample_report.html)**
 
 ## How it works
 

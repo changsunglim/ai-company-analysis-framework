@@ -2,3 +2,4 @@
 .env
 .venv-t/
 __pycache__/
+output/
