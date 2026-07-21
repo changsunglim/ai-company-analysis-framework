@@ -136,7 +136,7 @@ The `AsyncTaskQueue` was the trickiest part to get right. It does:
 
 ### Cost
 
-With `gpt-4o-mini`, a full analysis runs about **$0.005–$0.02** per company. The preprocessing pipeline keeps costs down by deduplicating, filtering, and only sending relevant data to each module.
+Free (**$0**) on Gemini/Groq free-tier models. With OpenAI `gpt-4o-mini`, a full analysis runs about **$0.005–$0.02** per company. The preprocessing pipeline keeps costs down by deduplicating, filtering, and only sending relevant data to each module.
 
 ## Configuration
 
