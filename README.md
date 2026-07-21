@@ -1,6 +1,12 @@
 # AI Company Analysis Framework
 
+[![CI](https://github.com/changsunglim/ai-company-analysis-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/changsunglim/ai-company-analysis-framework/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Automated pipeline that turns manual company research into structured, AI-powered reports. Uses OpenAI API + async processing for financial, competitive, and strategic analysis.
+
+**Results:** cuts company-analysis time from ~120 minutes of manual work to ~35 minutes automated, at $0.005–0.02 per run (gpt-4o-mini). Used to analyze 70+ companies. See a full example in [`examples/sample_report.md`](examples/sample_report.md).
 
 ```
                     ┌─────────────────────────────────────────────────┐
