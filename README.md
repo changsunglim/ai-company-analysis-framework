@@ -24,6 +24,15 @@ See a full example report: **[BlackRock](examples/blackrock.md)** (generated fre
 
 <div align="center">
 <img src="assets/screenshot.png" alt="The AI Company Analysis web app: a serif hero, a not-financial-advice disclaimer, and six provider cards — Groq, Cerebras, Gemini, OpenAI, OpenRouter, and Custom — with Groq selected." width="860">
+
+<br/>
+<br/>
+
+<a href="examples/blackrock.md">
+<img src="assets/report-example.png" alt="An excerpt of the actual BlackRock report the tool generated, shown in the app's own styling — Key Findings, Risk vs. Opportunity, and a BULLISH Overall Assessment, citing real figures like 30.6% revenue growth and a $12B data-center financing deal." width="860">
+</a>
+<br/>
+<sub>The report output, unedited — <a href="examples/blackrock.md">read the full BlackRock report →</a></sub>
 </div>
 
 ---
