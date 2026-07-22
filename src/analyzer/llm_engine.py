@@ -3,6 +3,7 @@ LLM engine - handles all the OpenAI API calls with rate limiting.
 """
 
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -37,20 +38,29 @@ class LLMAnalyzer:
     def __init__(self, config: dict | None = None, api_key: str | None = None):
         self.config = config or {}
 
-        self.model = self.config.get("model", "gpt-4o-mini")
+        # Model: env override wins, else config, else the OpenAI default.
+        self.model = os.environ.get("LLM_MODEL") or self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.3)
         self.max_tokens = self.config.get("max_tokens", 4096)
 
-        # rate limit 설정
+        # rate limit 설정 (env overrides let you dial these down for stricter free tiers)
         rate_config = self.config.get("rate_limit", {})
-        self.max_rpm = rate_config.get("max_requests_per_minute", 20)
+        self.max_rpm = int(os.environ.get("LLM_MAX_RPM") or rate_config.get("max_requests_per_minute", 20))
+        self.max_concurrent = int(os.environ.get("LLM_MAX_CONCURRENT") or rate_config.get("max_concurrent", 3))
 
-        # api_key explicit param takes precedence over OPENAI_API_KEY env var,
-        # so concurrent callers (e.g. a shared web app) don't clobber each other's key
-        self.client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
+        # Provider-agnostic: works with any OpenAI-compatible endpoint.
+        # Default is OpenAI. For a free run, set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL
+        # to a free provider (Groq, Gemini's OpenAI-compatible endpoint, etc.).
+        # The api_key param, when passed explicitly, wins over env vars - lets
+        # a shared caller (e.g. the web app) supply a per-request key without
+        # concurrent callers clobbering each other's credentials.
+        self.client = AsyncOpenAI(
+            base_url=os.environ.get("LLM_BASE_URL") or None,
+            api_key=api_key or os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+        )
         self.prompt_manager = PromptManager()
         self.task_queue = AsyncTaskQueue(
-            max_concurrent=3,
+            max_concurrent=self.max_concurrent,
             max_per_minute=self.max_rpm,
             retry_attempts=rate_config.get("retry_attempts", 3),
             retry_delay=rate_config.get("retry_delay", 2.0),
@@ -243,15 +253,20 @@ class LLMAnalyzer:
         return "\n\n".join(parts)
 
     def _update_cost(self, prompt_tokens: int, completion_tokens: int) -> None:
-        """Estimate cost. Pricing as of early 2024."""
-        # TODO: 모델 추가되면 여기 업데이트해야됨
+        """Estimate cost from token usage. Known OpenAI pricing only.
+
+        Free-tier / unknown provider models contribute $0 — we don't invent a price
+        for a model we have no rate card for, so a free run honestly reports $0.
+        """
         pricing = {
             "gpt-4o-mini": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
             "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.00 / 1_000_000},
             "gpt-4-turbo": {"input": 10.00 / 1_000_000, "output": 30.00 / 1_000_000},
         }
 
-        model_price = pricing.get(self.model, pricing["gpt-4o-mini"])
+        model_price = pricing.get(self.model)
+        if model_price is None:
+            return  # free-tier or unpriced model → no cost to add
         self.total_cost += (
             prompt_tokens * model_price["input"]
             + completion_tokens * model_price["output"]
