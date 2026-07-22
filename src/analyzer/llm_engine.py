@@ -34,7 +34,7 @@ class LLMAnalyzer:
         "growth_outlook": ["financial", "news", "industry"],
     }
 
-    def __init__(self, config: dict | None = None):
+    def __init__(self, config: dict | None = None, api_key: str | None = None):
         self.config = config or {}
 
         self.model = self.config.get("model", "gpt-4o-mini")
@@ -45,7 +45,9 @@ class LLMAnalyzer:
         rate_config = self.config.get("rate_limit", {})
         self.max_rpm = rate_config.get("max_requests_per_minute", 20)
 
-        self.client = AsyncOpenAI()
+        # api_key explicit param takes precedence over OPENAI_API_KEY env var,
+        # so concurrent callers (e.g. a shared web app) don't clobber each other's key
+        self.client = AsyncOpenAI(api_key=api_key) if api_key else AsyncOpenAI()
         self.prompt_manager = PromptManager()
         self.task_queue = AsyncTaskQueue(
             max_concurrent=3,
@@ -109,9 +111,17 @@ class LLMAnalyzer:
         results = await self.task_queue.process_batch(tasks)
 
         analysis_results = {}
+        task_errors = []
         for task, result in zip(tasks, results):
             if result and not isinstance(result, Exception):
                 analysis_results[task.task_id] = result
+            elif task.error is not None:
+                task_errors.append(task.error)
+
+        # every module failed for the same reason (e.g. bad API key) - surface
+        # that instead of letting it look like an empty/no-data result
+        if not analysis_results and task_errors:
+            raise task_errors[0]
 
         # executive summary는 다른 분석 끝나고 생성
         if analysis_results:

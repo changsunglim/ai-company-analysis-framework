@@ -2,6 +2,19 @@
 
 Automated pipeline that turns manual company research into structured, AI-powered reports. Uses OpenAI API + async processing for financial, competitive, and strategic analysis.
 
+## Try it
+
+**[Open the web app](#)** — enter a ticker and your own OpenAI API key, get a report in your browser. No install. Your key is used only for that request and never stored.
+
+*(Deployed via [Streamlit Community Cloud](https://streamlit.io/cloud) — replace the link above with your app's URL after deploying.)*
+
+Or run the UI locally:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
 ```
                     ┌─────────────────────────────────────────────────┐
                     │        AI Company Analysis Pipeline             │
@@ -143,6 +156,15 @@ collector:
 ```bash
 python -m pytest tests/ -v
 ```
+
+## Deploying the web app
+
+1. Push this repo to your own GitHub (already done if you're reading this on GitHub).
+2. Go to [share.streamlit.io](https://share.streamlit.io), sign in, "New app".
+3. Point it at this repo, branch `main`, main file `streamlit_app.py`. Deploy.
+4. Update the "Try it" link at the top of this README to your new app's URL.
+
+No secrets to configure — each visitor pastes their own OpenAI key into the app's sidebar at runtime; it's never persisted.
 
 ## Tech Stack
 
