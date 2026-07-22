@@ -22,6 +22,10 @@
 
 See a full example report: **[BlackRock](examples/blackrock.md)** (generated free on Gemini, $0.00) · **[Apple](examples/sample_report.md)**.
 
+<div align="center">
+<img src="assets/screenshot.png" alt="The AI Company Analysis web app: a serif hero, a not-financial-advice disclaimer, and six provider cards — Groq, Cerebras, Gemini, OpenAI, OpenRouter, and Custom — with Groq selected." width="860">
+</div>
+
 ---
 
 ## ⚡ Try it
