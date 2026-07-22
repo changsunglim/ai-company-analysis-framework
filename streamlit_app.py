@@ -32,7 +32,9 @@ MODULE_LABELS = {
     "growth_outlook": "Growth Outlook",
 }
 
-# Matches the presets documented in .env.example. Groq listed first (fastest free option).
+# Any OpenAI-compatible provider works. The curated cards cover the common ones;
+# OpenRouter exposes a model field, and "Custom" takes a raw base URL + model so a
+# visitor can point at anything (DeepSeek, Mistral, Together, a self-hosted endpoint…).
 PROVIDERS = {
     "Groq": {
         "base_url": "https://api.groq.com/openai/v1",
@@ -40,12 +42,32 @@ PROVIDERS = {
         "key_label": "Groq API key",
         "key_help": "Get a free key at console.groq.com/keys.",
         "key_placeholder": "gsk_...",
-        "price": "$0",
+        "price": "Free",
+        "tag": "Recommended",
         "recommended": True,
+        "mono": "Gq",
+        "chip": "#C2683B",
         "notes": [
             "No cost, ever",
             "Usually the fastest provider",
-            "Low free-tier rate limit — may pause between modules",
+            "Low free-tier rate limit",
+        ],
+    },
+    "Cerebras": {
+        "base_url": "https://api.cerebras.ai/v1",
+        "model": "llama-3.3-70b",
+        "key_label": "Cerebras API key",
+        "key_help": "Get a free key at cloud.cerebras.ai.",
+        "key_placeholder": "csk-...",
+        "price": "Free",
+        "tag": "Fastest",
+        "recommended": False,
+        "mono": "Cb",
+        "chip": "#2F8080",
+        "notes": [
+            "No cost on the free tier",
+            "Extremely fast inference",
+            "Daily token limits apply",
         ],
     },
     "Gemini": {
@@ -54,12 +76,15 @@ PROVIDERS = {
         "key_label": "Gemini API key",
         "key_help": "Get a free key at aistudio.google.com/apikey.",
         "key_placeholder": "AIza...",
-        "price": "$0",
+        "price": "Free",
+        "tag": "Generous limits",
         "recommended": False,
+        "mono": "Gm",
+        "chip": "#4A72B0",
         "notes": [
             "No cost, ever",
             "Comparable quality to Groq",
-            "Worth trying if Groq is rate-limited",
+            "Roomier free tier",
         ],
     },
     "OpenAI": {
@@ -68,12 +93,54 @@ PROVIDERS = {
         "key_label": "OpenAI API key",
         "key_help": "Get one at platform.openai.com/api-keys.",
         "key_placeholder": "sk-...",
-        "price": "~$0.005–0.02",
+        "price": "~$0.01",
+        "tag": "Most reliable",
         "recommended": False,
+        "mono": "AI",
+        "chip": "#3F7D5A",
         "notes": [
             "Per report, on gpt-4o-mini",
-            "No free-tier rate limit",
-            "Requires a funded OpenAI account",
+            "No free-tier rate cap",
+            "Requires a funded account",
+        ],
+    },
+    "OpenRouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model_editable": True,
+        "key_label": "OpenRouter API key",
+        "key_help": "Get a key at openrouter.ai/keys.",
+        "key_placeholder": "sk-or-...",
+        "price": "Free+",
+        "tag": "100s of models",
+        "recommended": False,
+        "mono": "OR",
+        "chip": "#7A6AA8",
+        "notes": [
+            "One key, hundreds of models",
+            "Free and paid models",
+            "Pick any model below",
+        ],
+    },
+    "Custom": {
+        "base_url": None,
+        "model": None,
+        "base_editable": True,
+        "model_editable": True,
+        "base_placeholder": "https://api.deepseek.com",
+        "model_placeholder": "deepseek-chat",
+        "key_label": "API key",
+        "key_help": "Any OpenAI-compatible provider — DeepSeek, Mistral, Together, self-hosted, etc.",
+        "key_placeholder": "your provider key",
+        "price": "Any",
+        "tag": "Bring your own",
+        "recommended": False,
+        "mono": "＋",
+        "chip": "#8A8378",
+        "notes": [
+            "Any OpenAI-compatible endpoint",
+            "Set the base URL + model",
+            "DeepSeek, Mistral, Together…",
         ],
     },
 }
@@ -141,54 +208,81 @@ st.markdown(
 
     /* ---- provider cards ---- */
     .provider-card {
+        position: relative;
         background: var(--surface);
         border: 1px solid var(--surface-border);
-        border-radius: 14px;
-        padding: 1.25rem 1.3rem 1.1rem 1.3rem;
-        margin-bottom: 0.6rem;
-        transition: border-color 180ms ease, box-shadow 180ms ease;
+        border-radius: 16px;
+        padding: 1.1rem 1.2rem 1rem 1.2rem;
+        margin-bottom: 0.55rem;
+        min-height: 186px;
+        overflow: hidden;
+        will-change: transform;
+        transition: transform 260ms cubic-bezier(0.34, 1.42, 0.64, 1),
+                    box-shadow 260ms ease, border-color 200ms ease, background 220ms ease;
+    }
+    /* whole-column hover lifts the card — covers the button below it too */
+    div[data-testid="stColumn"]:hover .provider-card,
+    div[data-testid="column"]:hover .provider-card {
+        transform: translateY(-6px);
+        box-shadow: 0 20px 42px -24px rgba(60, 48, 18, 0.42);
+        border-color: #D8CDB4;
     }
     .provider-card.selected {
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent), 0 8px 24px -14px var(--accent-shadow);
+        background: linear-gradient(180deg, var(--accent-soft), var(--surface) 62%);
+        box-shadow: 0 0 0 1.5px var(--accent), 0 22px 46px -26px var(--accent-shadow);
+        transform: translateY(-3px);
     }
-    .provider-card .badge {
-        display: inline-block;
-        font-size: 0.68rem;
-        font-weight: 500;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--accent);
-        background: var(--accent-soft);
-        border-radius: 4px;
-        padding: 0.18rem 0.5rem;
-        margin-bottom: 0.55rem;
+    div[data-testid="stColumn"]:hover .provider-card.selected,
+    div[data-testid="column"]:hover .provider-card.selected {
+        transform: translateY(-8px);
     }
-    .provider-card .name {
-        font-weight: 600;
-        font-size: 1.05rem;
-        color: var(--ink);
-        margin-bottom: 0.15rem;
+    /* accent hairline that sweeps across the top edge on select */
+    .provider-card::after {
+        content: "";
+        position: absolute;
+        left: 0; top: 0;
+        height: 3px; width: 100%;
+        background: var(--accent);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 320ms cubic-bezier(0.34, 1.42, 0.64, 1);
+    }
+    .provider-card.selected::after { transform: scaleX(1); }
+
+    .pc-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+    .pc-mono {
+        flex: 0 0 auto;
+        width: 32px; height: 32px;
+        border-radius: 10px;
+        display: grid; place-items: center;
+        font-size: 0.72rem; font-weight: 600; color: #fff;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+                    0 3px 8px -3px rgba(0, 0, 0, 0.35);
+    }
+    .pc-name { font-weight: 600; font-size: 1.02rem; color: var(--ink); line-height: 1.15; }
+    .pc-tag {
+        font-size: 0.62rem; font-weight: 600; letter-spacing: 0.09em;
+        text-transform: uppercase; color: var(--accent); margin-top: 0.15rem;
     }
     .provider-card .price {
         font-variant-numeric: tabular-nums;
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: var(--ink);
-        margin-bottom: 0.7rem;
+        font-size: 1.32rem; font-weight: 600; color: var(--ink);
+        margin-bottom: 0.55rem;
     }
     .provider-card .price span {
-        font-size: 0.78rem;
-        font-weight: 400;
-        color: var(--muted);
-        margin-left: 0.3rem;
+        font-size: 0.72rem; font-weight: 400; color: var(--muted); margin-left: 0.28rem;
     }
     .provider-card ul {
-        margin: 0;
-        padding-left: 1.05rem;
-        color: var(--muted);
-        font-size: 0.85rem;
-        line-height: 1.65;
+        margin: 0; padding-left: 1rem;
+        color: var(--muted); font-size: 0.8rem; line-height: 1.6;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .provider-card, .provider-card::after { transition: none; }
+        div[data-testid="stColumn"]:hover .provider-card,
+        div[data-testid="column"]:hover .provider-card,
+        .provider-card.selected { transform: none; }
     }
 
     /* ---- disclaimer ---- */
@@ -268,33 +362,38 @@ st.markdown('<div class="section-label">Provider</div>', unsafe_allow_html=True)
 
 if "provider_name" not in st.session_state:
     st.session_state.provider_name = next(
-        name for name, p in PROVIDERS.items() if p["recommended"]
+        name for name, p in PROVIDERS.items() if p.get("recommended")
     )
 
-cols = st.columns(3)
-for col, (name, p) in zip(cols, PROVIDERS.items()):
-    with col:
-        is_selected = st.session_state.provider_name == name
-        badge_html = '<div class="badge">Recommended</div>' if p["recommended"] else ""
-        notes_html = "".join(f"<li>{n}</li>" for n in p["notes"])
-        card_class = "provider-card selected" if is_selected else "provider-card"
-        st.markdown(
-            f'<div class="{card_class}">{badge_html}'
-            f'<div class="name">{name}</div>'
-            f'<div class="price">{p["price"]}<span>/ report</span></div>'
-            f'<ul>{notes_html}</ul>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        if st.button(
-            "Selected" if is_selected else f"Choose {name}",
-            key=f"select_{name}",
-            type="primary" if is_selected else "secondary",
-            use_container_width=True,
-            disabled=is_selected,
-        ):
-            st.session_state.provider_name = name
-            st.rerun()
+provider_items = list(PROVIDERS.items())
+for row_start in range(0, len(provider_items), 3):
+    cols = st.columns(3)
+    for col, (name, p) in zip(cols, provider_items[row_start:row_start + 3]):
+        with col:
+            is_selected = st.session_state.provider_name == name
+            notes_html = "".join(f"<li>{n}</li>" for n in p["notes"])
+            tag_html = f'<div class="pc-tag">{p["tag"]}</div>' if p.get("tag") else ""
+            card_class = "provider-card selected" if is_selected else "provider-card"
+            st.markdown(
+                f'<div class="{card_class}">'
+                f'<div class="pc-head">'
+                f'<div class="pc-mono" style="background:{p["chip"]}">{p["mono"]}</div>'
+                f'<div><div class="pc-name">{name}</div>{tag_html}</div>'
+                f'</div>'
+                f'<div class="price">{p["price"]}<span>/ report</span></div>'
+                f'<ul>{notes_html}</ul>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "✓ Selected" if is_selected else "Select",
+                key=f"select_{name}",
+                type="primary" if is_selected else "secondary",
+                use_container_width=True,
+                disabled=is_selected,
+            ):
+                st.session_state.provider_name = name
+                st.rerun()
 
 provider_name = st.session_state.provider_name
 provider = PROVIDERS[provider_name]
@@ -306,6 +405,24 @@ api_key = st.text_input(
     help=f"Used only for this request, never stored or logged. {provider['key_help']}",
     placeholder=provider["key_placeholder"],
 )
+
+# Providers that let the visitor point at a specific endpoint / model.
+eff_base_url = provider["base_url"]
+eff_model = provider["model"]
+if provider.get("base_editable"):
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        eff_base_url = st.text_input(
+            "API base URL", placeholder=provider.get("base_placeholder", ""),
+        ).strip() or None
+    with ec2:
+        eff_model = st.text_input(
+            "Model", placeholder=provider.get("model_placeholder", ""),
+        ).strip() or None
+elif provider.get("model_editable"):
+    eff_model = st.text_input(
+        "Model", value=provider["model"], help="Any model ID this provider serves.",
+    ).strip() or provider["model"]
 
 with st.expander("Analysis modules", expanded=False):
     selected_modules = st.multiselect(
@@ -328,6 +445,10 @@ run_clicked = st.button("Run analysis", type="primary", use_container_width=True
 if run_clicked:
     if not api_key:
         st.error(f"Enter your {provider['key_label']} first.")
+    elif provider.get("base_editable") and not eff_base_url:
+        st.error("Enter the API base URL for your custom provider.")
+    elif provider.get("model_editable") and not eff_model:
+        st.error("Enter the model ID for your provider.")
     elif not ticker.strip():
         st.error("Enter a ticker.")
     elif not selected_modules:
@@ -338,8 +459,8 @@ if run_clicked:
                 with st.spinner("Collecting data and running analysis (usually 30-90s)..."):
                     pipeline = AnalysisPipeline(
                         api_key=api_key,
-                        base_url=provider["base_url"],
-                        model=provider["model"],
+                        base_url=eff_base_url,
+                        model=eff_model,
                     )
                     pipeline.reporter.output_dir = Path(tmp_dir)
 
