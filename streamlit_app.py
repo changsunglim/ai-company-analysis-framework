@@ -33,27 +33,34 @@ MODULE_LABELS = {
 }
 
 # Matches the presets documented in .env.example
+# Groq listed first (fastest free option) - selectbox defaults to index 0.
 PROVIDERS = {
-    "OpenAI (paid, ~$0.005-0.02/run)": {
-        "base_url": None,
-        "model": "gpt-4o-mini",
-        "key_label": "OpenAI API key",
-        "key_help": "Get one at platform.openai.com/api-keys.",
-        "key_placeholder": "sk-...",
-    },
-    "Groq free tier (free, fast)": {
+    "Groq — free, fast (recommended)": {
         "base_url": "https://api.groq.com/openai/v1",
         "model": "llama-3.3-70b-versatile",
         "key_label": "Groq API key",
         "key_help": "Get a free key at console.groq.com/keys.",
         "key_placeholder": "gsk_...",
+        "blurb": "$0 per report. Usually the fastest option. Free tier has a low "
+        "requests/minute cap, so it may pause between modules.",
     },
-    "Gemini free tier (free)": {
+    "Gemini — free": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "model": "gemini-2.0-flash",
         "key_label": "Gemini API key",
         "key_help": "Get a free key at aistudio.google.com/apikey.",
         "key_placeholder": "AIza...",
+        "blurb": "$0 per report. Similar quality to Groq, different free-tier limits — "
+        "worth trying if Groq is rate-limited.",
+    },
+    "OpenAI — paid": {
+        "base_url": None,
+        "model": "gpt-4o-mini",
+        "key_label": "OpenAI API key",
+        "key_help": "Get one at platform.openai.com/api-keys.",
+        "key_placeholder": "sk-...",
+        "blurb": "~$0.005–0.02 per report on gpt-4o-mini. No free tier, but no rate "
+        "caps to worry about either.",
     },
 }
 
@@ -69,6 +76,7 @@ with st.sidebar:
     st.header("Settings")
     provider_name = st.selectbox("Provider", options=list(PROVIDERS.keys()))
     provider = PROVIDERS[provider_name]
+    st.caption(provider["blurb"])
 
     api_key = st.text_input(
         provider["key_label"],
@@ -76,10 +84,6 @@ with st.sidebar:
         help=f"Used only for this request, never stored or logged. {provider['key_help']}",
         placeholder=provider["key_placeholder"],
     )
-    if provider["base_url"] is None:
-        st.caption("A full report costs roughly $0.005–$0.02 with gpt-4o-mini.")
-    else:
-        st.caption("Free tier — report costs $0. May be slower or rate-limited.")
 
     selected_modules = st.multiselect(
         "Analysis modules",
@@ -134,7 +138,7 @@ if run_clicked:
                 st.markdown(report_text)
 
             except AuthenticationError:
-                st.error(f"{provider_name.split(' (')[0]} rejected that API key. Double-check it and try again.")
+                st.error(f"{provider_name.split(' — ')[0]} rejected that API key. Double-check it and try again.")
             except (APIConnectionError, APIError) as e:
                 st.error(f"API error: {e}")
             except RuntimeError as e:
