@@ -35,11 +35,17 @@ class LLMAnalyzer:
         "growth_outlook": ["financial", "news", "industry"],
     }
 
-    def __init__(self, config: dict | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        config: dict | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ):
         self.config = config or {}
 
-        # Model: env override wins, else config, else the OpenAI default.
-        self.model = os.environ.get("LLM_MODEL") or self.config.get("model", "gpt-4o-mini")
+        # Model: explicit param wins, then env override, then config, then the OpenAI default.
+        self.model = model or os.environ.get("LLM_MODEL") or self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.3)
         self.max_tokens = self.config.get("max_tokens", 4096)
 
@@ -51,11 +57,11 @@ class LLMAnalyzer:
         # Provider-agnostic: works with any OpenAI-compatible endpoint.
         # Default is OpenAI. For a free run, set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL
         # to a free provider (Groq, Gemini's OpenAI-compatible endpoint, etc.).
-        # The api_key param, when passed explicitly, wins over env vars - lets
-        # a shared caller (e.g. the web app) supply a per-request key without
+        # The api_key/base_url params, when passed explicitly, win over env vars - lets
+        # a shared caller (e.g. the web app) supply per-request provider settings without
         # concurrent callers clobbering each other's credentials.
         self.client = AsyncOpenAI(
-            base_url=os.environ.get("LLM_BASE_URL") or None,
+            base_url=base_url or os.environ.get("LLM_BASE_URL") or None,
             api_key=api_key or os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
         )
         self.prompt_manager = PromptManager()

@@ -29,7 +29,13 @@ class AnalysisPipeline:
     4. REPORT - markdown output
     """
 
-    def __init__(self, config_path: str = "config/config.yaml", api_key: str | None = None):
+    def __init__(
+        self,
+        config_path: str = "config/config.yaml",
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ):
         self.config = self._load_config(config_path)
 
         collector_cfg = self.config.get("collector", {})
@@ -40,7 +46,9 @@ class AnalysisPipeline:
         }
 
         self.preprocessor = DataPreprocessor(self.config.get("preprocessor", {}))
-        self.analyzer = LLMAnalyzer(self.config.get("analyzer", {}), api_key=api_key)
+        self.analyzer = LLMAnalyzer(
+            self.config.get("analyzer", {}), api_key=api_key, base_url=base_url, model=model,
+        )
         self.reporter = ReportGenerator(self.config.get("reporter", {}))
 
         self.metrics: dict[str, float] = {}

@@ -5,7 +5,7 @@ Run locally:
     streamlit run streamlit_app.py
 
 Or deploy for free on Streamlit Community Cloud pointed at this repo/file.
-Each visitor supplies their own OpenAI API key — nothing is stored server-side.
+Each visitor supplies their own API key — nothing is stored server-side.
 """
 
 import asyncio
@@ -32,6 +32,31 @@ MODULE_LABELS = {
     "growth_outlook": "Growth Outlook",
 }
 
+# Matches the presets documented in .env.example
+PROVIDERS = {
+    "OpenAI (paid, ~$0.005-0.02/run)": {
+        "base_url": None,
+        "model": "gpt-4o-mini",
+        "key_label": "OpenAI API key",
+        "key_help": "Get one at platform.openai.com/api-keys.",
+        "key_placeholder": "sk-...",
+    },
+    "Groq free tier (free, fast)": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "model": "llama-3.3-70b-versatile",
+        "key_label": "Groq API key",
+        "key_help": "Get a free key at console.groq.com/keys.",
+        "key_placeholder": "gsk_...",
+    },
+    "Gemini free tier (free)": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "model": "gemini-2.0-flash",
+        "key_label": "Gemini API key",
+        "key_help": "Get a free key at aistudio.google.com/apikey.",
+        "key_placeholder": "AIza...",
+    },
+}
+
 st.set_page_config(page_title="AI Company Analysis", page_icon="📊", layout="centered")
 
 st.title("📊 AI Company Analysis")
@@ -42,13 +67,20 @@ st.caption(
 
 with st.sidebar:
     st.header("Settings")
+    provider_name = st.selectbox("Provider", options=list(PROVIDERS.keys()))
+    provider = PROVIDERS[provider_name]
+
     api_key = st.text_input(
-        "OpenAI API key",
+        provider["key_label"],
         type="password",
-        help="Used only for this request, never stored or logged. "
-        "Get one at platform.openai.com/api-keys.",
+        help=f"Used only for this request, never stored or logged. {provider['key_help']}",
+        placeholder=provider["key_placeholder"],
     )
-    st.caption("A full report costs roughly $0.005–$0.02 with gpt-4o-mini.")
+    if provider["base_url"] is None:
+        st.caption("A full report costs roughly $0.005–$0.02 with gpt-4o-mini.")
+    else:
+        st.caption("Free tier — report costs $0. May be slower or rate-limited.")
+
     selected_modules = st.multiselect(
         "Analysis modules",
         options=MODULES,
@@ -66,7 +98,7 @@ run_clicked = st.button("Run analysis", type="primary", use_container_width=True
 
 if run_clicked:
     if not api_key:
-        st.error("Enter your OpenAI API key in the sidebar first.")
+        st.error(f"Enter your {provider['key_label']} in the sidebar first.")
     elif not ticker.strip():
         st.error("Enter a ticker.")
     elif not selected_modules:
@@ -75,7 +107,11 @@ if run_clicked:
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 with st.spinner("Collecting data and running analysis (usually 30-90s)..."):
-                    pipeline = AnalysisPipeline(api_key=api_key)
+                    pipeline = AnalysisPipeline(
+                        api_key=api_key,
+                        base_url=provider["base_url"],
+                        model=provider["model"],
+                    )
                     pipeline.reporter.output_dir = Path(tmp_dir)
 
                     report_path = asyncio.run(
@@ -98,9 +134,9 @@ if run_clicked:
                 st.markdown(report_text)
 
             except AuthenticationError:
-                st.error("OpenAI rejected that API key. Double-check it and try again.")
+                st.error(f"{provider_name.split(' (')[0]} rejected that API key. Double-check it and try again.")
             except (APIConnectionError, APIError) as e:
-                st.error(f"OpenAI API error: {e}")
+                st.error(f"API error: {e}")
             except RuntimeError as e:
                 st.error(f"{e} Check the ticker is valid and try again.")
             except Exception as e:
