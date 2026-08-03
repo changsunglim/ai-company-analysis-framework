@@ -20,6 +20,8 @@
 >
 > A two-hour manual research task, done in a couple of minutes. **This is not financial advice** — see the [disclaimer](#-disclaimer).
 
+**120 min → 35 min** per company · **$0.005–$0.02** a report · run across **70+ companies** so far.
+
 See a full example report: **[BlackRock](examples/blackrock.md)** (generated free on Gemini, $0.00) · **[Apple](examples/sample_report.md)**.
 
 <div align="center">
